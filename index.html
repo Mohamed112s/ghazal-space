@@ -1,0 +1,824 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ghazal Space - Smart Café</title>
+<link rel="manifest" href="manifest.webmanifest">
+<meta name="theme-color" content="#f6f1ea">
+<link href="https://fonts.googleapis.com/css2?family=Aref+Ruqaa:wght@700&family=Cairo:wght@400;700&display=swap" rel="stylesheet">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Ghazal Space">
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" type="image/png" href="icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<!-- Firebase (للطلبات المشتركة بين كل الموبايلات) -->
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-app-compat.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/firebase/10.12.2/firebase-database-compat.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-messaging-compat.js"></script>
+<style>
+*{box-sizing:border-box;font-family:'Segoe UI',Tahoma,sans-serif;margin:0;padding:0}
+body{direction:rtl;background:#4A2E5B;color:#fff;min-height:100vh;padding-bottom:90px}
+header{background:#120b17;padding:12px 20px;display:flex;justify-content:space-between;align-items:center;border-bottom:2px solid #8e44ad;position:sticky;top:0;z-index:100}
+.logo-box{background:#f4efed;padding:4px 12px;border-radius:8px;color:#4A2E5B;font-weight:bold;font-size:1.4rem}
+.badge{background:#8e44ad;padding:6px 14px;border-radius:20px;font-weight:bold}
+.btn{padding:8px 16px;border:none;border-radius:6px;cursor:pointer;font-weight:bold;color:#fff;transition:.2s}
+.btn:active{transform:scale(.95)}
+.btn-primary{background:#8e44ad}.btn-danger{background:#e74c3c}.btn-success{background:#2ecc71;color:#000}.btn-warning{background:#f39c12}
+.container{max-width:850px;margin:20px auto;padding:0 15px}
+.hidden{display:none!important}
+.menu-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:15px;margin:12px 0 20px}
+.card{background:rgba(93,63,106,.95);border-radius:12px;overflow:hidden;border:1px solid rgba(255,255,255,.15);display:flex;flex-direction:column;transition:transform .3s,box-shadow .3s}
+.card:hover{transform:translateY(-5px);box-shadow:0 10px 22px rgba(142,68,173,.4)}
+.card-img{height:100px;background:#2d173a;display:flex;justify-content:center;align-items:center;border-bottom:2px solid #8e44ad;font-size:2.5rem}
+.card-body{padding:12px;display:flex;flex-direction:column;gap:8px;flex-grow:1;justify-content:space-between}
+#floating-cart-btn{position:fixed;bottom:25px;left:25px;background:#8e44ad;color:#fff;border:2px solid #f1c40f;width:65px;height:65px;border-radius:50%;display:flex;flex-direction:column;justify-content:center;align-items:center;cursor:pointer;box-shadow:0 6px 20px rgba(0,0,0,.5);z-index:999}
+#cart-badge-count{position:absolute;top:-5px;right:-5px;background:#e74c3c;width:24px;height:24px;border-radius:50%;display:flex;justify-content:center;align-items:center;font-size:.75rem;font-weight:bold;border:2px solid #fff}
+#secret-cashier-trigger{position:fixed;bottom:25px;right:25px;background:transparent;border:none;color:rgba(255,255,255,.25);font-size:1.2rem;cursor:pointer;z-index:999}
+.modal{position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;justify-content:center;align-items:center;z-index:1000}
+.modal-card{background:#2d173a;padding:25px;border-radius:12px;border:2px solid #8e44ad;width:92%;max-width:480px;max-height:85vh;overflow-y:auto}
+.cart-item{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.08);padding:10px;border-radius:8px;margin-bottom:8px;gap:8px}
+.qty-btn{width:28px;height:28px;border-radius:50%;border:none;font-weight:bold;cursor:pointer;background:#8e44ad;color:#fff}
+.admin-section{background:rgba(93,63,106,.95);padding:15px;border-radius:10px;margin-bottom:20px}
+.tables-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(100px,1fr));gap:10px;margin-top:10px}
+.table-box{padding:10px;background:#2ecc71;color:#000;border-radius:6px;text-align:center;font-weight:bold;cursor:pointer}
+.table-box.busy{background:#e74c3c;color:#fff}
+.table-box.selected{outline:3px solid #f1c40f}
+.order-card{background:rgba(18,11,23,.8);border-right:5px solid #8e44ad;padding:12px;margin-bottom:10px;border-radius:6px}
+.stat-card{background:#120b17;padding:15px;border-radius:8px;border:1px solid #8e44ad;text-align:center;flex:1;min-width:140px}
+.customer-status-box{background:rgba(142,68,173,.3);border:2px dashed #f1c40f;padding:15px;border-radius:10px;margin-bottom:20px;text-align:center}
+.table-wrap{overflow-x:auto;max-height:220px;overflow-y:auto}
+.hr-table{width:100%;border-collapse:collapse;font-size:.85rem;background:#1a1a1a;min-width:420px}
+.hr-table th,.hr-table td{border:1px solid #444;padding:6px 8px;text-align:center}
+.hr-table th{background:#8e44ad}
+.qr-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:14px}
+.qr-item{background:#fff;color:#000;padding:12px;border-radius:8px;text-align:center;font-weight:bold}
+.qr-item div.q{display:flex;justify-content:center;margin-top:8px}
+.warn:empty{display:none}
+.warn{background:#f39c12;color:#000;padding:8px 12px;border-radius:6px;font-size:.85rem;margin-bottom:12px}
+input[type=password],input[type=text]{width:100%;padding:10px;border-radius:6px;border:1px solid #888;background:#1a1a1a;color:#fff;margin:10px 0}
+.card-img{overflow:hidden}
+.card-img img,.thumb img{width:100%;height:100%;object-fit:cover}
+.thumb{width:44px;height:44px;border-radius:8px;background:#2d173a;display:flex;align-items:center;justify-content:center;overflow:hidden;font-size:1.5rem;flex-shrink:0}
+.img-prev img{width:120px;height:120px;object-fit:cover;border-radius:8px;display:block;margin:8px 0}
+input[type=date]{padding:8px;border-radius:6px;border:1px solid #888;background:#1a1a1a;color:#fff;color-scheme:dark}
+/* ===== هوية غزل: كريمي + لافندر + بنفسجي ===== */
+:root{--base:#f6f1ea;--b1:#e4d9ee;--b2:#d6c6e6;--b3:#4a1f5c;--ink:#3b1b4a;--brush:polygon(1% 14%,6% 0,20% 9%,38% 1%,55% 8%,74% 0,92% 7%,99% 16%,100% 55%,97% 88%,88% 100%,66% 92%,45% 100%,25% 91%,8% 100%,0 80%)}
+body[data-bg=lavender]{--base:#ece3f4;--b1:#dccbed;--b2:#c9b1de}
+*{font-family:'Cairo','Segoe UI',Tahoma,sans-serif}
+body{background:var(--base);color:var(--ink)}
+body.cashier{background:#4A2E5B;color:#fff}
+#bg{position:fixed;inset:0;z-index:-1;pointer-events:none;background:var(--base);overflow:hidden}
+#bg svg{position:absolute}
+#bg .blobs{inset:0;width:100%;height:100%}
+#bg .leaf{width:min(44vw,240px);height:auto}
+#bg .tl{top:0;left:0}
+#bg .br{bottom:0;right:0;transform:rotate(180deg)}
+.b1{fill:var(--b1)}.b2{fill:var(--b2)}.b3{fill:var(--b3)}
+body.cashier #bg{display:none}
+header{background:rgba(246,241,234,.93);color:var(--b3);backdrop-filter:blur(6px);border-bottom:2px solid var(--b2)}
+.logo-box{background:var(--b3);color:#f4efed}
+body.cashier header{background:#120b17;color:#fff;border-bottom:2px solid #8e44ad}
+body.cashier .logo-box{background:#f4efed;color:#4A2E5B}
+.modal-card{color:#fff}
+#secret-cashier-trigger{color:rgba(74,31,92,.35)}
+#customer-view .card{background:rgba(255,255,255,.82);border:1px solid var(--b2);color:var(--ink);box-shadow:0 2px 10px rgba(74,31,92,.08)}
+#customer-view .card-img{background:var(--b1);border-bottom:2px solid var(--b2)}
+#customer-view .customer-status-box{background:#fff;border:2px dashed var(--b3);color:var(--ink)}
+#customer-view .customer-status-box h3{color:var(--b3)!important}
+#customer-view .customer-status-box p{color:#6b4a7c!important}
+.price{color:#7a3b99;font-weight:bold}
+.brush-title{display:inline-block;background:var(--b3);color:#fff;padding:12px 46px;font-size:1.7rem;clip-path:var(--brush);font-family:'Aref Ruqaa','Cairo',serif}
+.cat-brush{display:inline-block;background:var(--b2);color:var(--b3);padding:6px 32px;margin:20px 0 6px;font-size:1.15rem;clip-path:var(--brush);font-family:'Aref Ruqaa','Cairo',serif}
+body.cashier #lock{display:none!important}
+@media print{
+ body *{visibility:hidden}
+ #qr-print,#qr-print *{visibility:visible}
+ #qr-print{position:absolute;inset:0;background:#fff;padding:10px}
+ .no-print{display:none!important}
+}
+</style>
+</head>
+<body>
+<div id="bg" aria-hidden="true">
+<svg class="blobs" viewBox="0 0 400 800" preserveAspectRatio="none">
+<defs><path id="lf" d="M0 0C10-9 24-11 38-3C24 7 10 9 0 0Z"/>
+<g id="branch" fill="none" stroke="#5b2a6e" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" opacity=".55"><path d="M12 258C28 180 62 96 118 14"/><use href="#lf" transform="translate(17 234) rotate(-30)"/><use href="#lf" transform="translate(17 234) rotate(-110)"/><use href="#lf" transform="translate(27 198) rotate(-30)"/><use href="#lf" transform="translate(27 198) rotate(-112)"/><use href="#lf" transform="translate(38 167) rotate(-35)"/><use href="#lf" transform="translate(38 167) rotate(-118)"/><use href="#lf" transform="translate(50 137) rotate(-38)"/><use href="#lf" transform="translate(50 137) rotate(-122)"/><use href="#lf" transform="translate(63 108) rotate(-42)"/><use href="#lf" transform="translate(63 108) rotate(-126)"/><use href="#lf" transform="translate(80 76) rotate(-45)"/><use href="#lf" transform="translate(80 76) rotate(-130)"/><use href="#lf" transform="translate(118 14) rotate(-70) scale(1.1)"/></g></defs>
+<path class="b1" d="M0 0H170C120 70 150 150 90 230C40 296 70 380 0 430Z"/>
+<path class="b2" d="M0 380C70 420 40 540 110 610C160 665 90 740 140 800H0Z"/>
+<path class="b3" d="M400 0V250C340 215 345 130 300 70C285 48 270 22 250 0Z"/>
+<path class="b1" d="M400 560C335 595 355 680 305 742C288 762 270 782 245 800H400Z"/>
+</svg>
+<svg class="leaf tl" viewBox="0 0 150 260"><use href="#branch"/></svg>
+<svg class="leaf br" viewBox="0 0 150 260"><use href="#branch"/></svg>
+</div>
+
+<header>
+  <div style="display:flex;align-items:center;gap:10px">
+    <div class="logo-box">غَزَل</div>
+    <span style="font-size:1.2rem;font-weight:bold">Ghazal Space</span>
+  </div>
+  <div class="badge" id="table-badge">طاولة رقم: <span id="table-num">1</span></div>
+</header>
+<div id="net-warn" class="hidden" style="background:#c0392b;color:#fff;text-align:center;padding:6px 10px;font-size:.85rem"></div>
+
+<button id="secret-cashier-trigger" onclick="openCashier()" title="لوحة الكاشير">🔐</button>
+
+<!-- ============ واجهة الزبون ============ -->
+<div class="container" id="customer-view">
+  <div id="customer-notification" class="customer-status-box hidden">
+    <h3 style="color:#f1c40f;margin-bottom:5px">🔔 حالة طلبك الآن</h3>
+    <div id="customer-status-text" style="font-size:1.05rem;font-weight:bold"></div>
+    <p style="font-size:.75rem;color:#ccc;margin-top:6px">سيب الصفحة مفتوحة وهيجيلك تنبيه أول ما طلبك يجهز 🔔</p>
+  </div>
+  <div style="text-align:center;margin:6px 0 14px"><h2 class="brush-title">قائمة المنيو</h2></div>
+  <div id="menu-container"></div>
+</div>
+
+<div id="floating-cart-btn" onclick="openCartModal()">
+  <span style="font-size:1.4rem">🛒</span>
+  <span style="font-size:.65rem;font-weight:bold">السلة</span>
+  <div id="cart-badge-count">0</div>
+</div>
+
+<!-- ============ لوحة الكاشير ============ -->
+<div class="container hidden" id="cashier-view">
+  <div style="display:flex;justify-content:space-between;margin-bottom:15px;flex-wrap:wrap;gap:10px">
+    <button class="btn btn-danger" onclick="closeCashier()">العودة للمنيو ↩️</button>
+    <button class="btn btn-warning hidden" id="push-btn" onclick="toggleStaffPush()"></button>
+    <button class="btn btn-primary" id="install-btn" onclick="installApp()">📲 تثبيت كأيقونة</button>
+    <span id="who" style="align-self:center;font-weight:bold"></span>
+    <button class="btn btn-warning" onclick="openQR()">🔳 طباعة QR الطاولات</button>
+    <button class="btn btn-primary" onclick="toggleFullscreen()">ملء الشاشة 🖥️</button>
+  </div>
+  <div id="mode-warn" class="warn hidden">⚠️ وضع تجريبي: الطلبات محفوظة على هذا الجهاز فقط. ضيف إعدادات Firebase عشان الكاشير يشوف طلبات كل الطاولات.</div>
+
+  <div class="admin-section" style="border:2px solid #f1c40f">
+    <h3 style="color:#f1c40f">📊 الجرد والتقارير</h3>
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:12px 0">
+      <label>من</label><input type="date" id="rp-from" onchange="renderReport()">
+      <label>إلى</label><input type="date" id="rp-to" onchange="renderReport()">
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px">
+      <button class="btn btn-primary" onclick="quick('today')">اليوم</button>
+      <button class="btn btn-primary" onclick="quick('yday')">أمس</button>
+      <button class="btn btn-primary" onclick="quick('week')">آخر 7 أيام</button>
+      <button class="btn btn-primary" onclick="quick('month')">الشهر ده</button>
+      <button class="btn btn-primary" onclick="quick('all')">الكل</button>
+      <button class="btn btn-success" onclick="exportCSV()">⬇️ تصدير Excel</button>
+    </div>
+    <div style="display:flex;gap:12px;flex-wrap:wrap">
+      <div class="stat-card"><p style="color:#aaa;font-size:.85rem">الإيرادات</p><h2 style="color:#2ecc71;margin-top:5px"><span id="stat-revenue">0</span> ج.م</h2></div>
+      <div class="stat-card"><p style="color:#aaa;font-size:.85rem">الطلبات المدفوعة</p><h2 style="color:#f1c40f;margin-top:5px"><span id="stat-count">0</span></h2></div>
+      <div class="stat-card"><p style="color:#aaa;font-size:.85rem">متوسط الطلب</p><h2 style="margin-top:5px"><span id="stat-avg">0</span> ج.م</h2></div>
+    </div>
+    <h4 style="margin:15px 0 8px">📅 المبيعات يوم بيوم</h4><div id="rp-days"></div>
+    <h4 style="margin:15px 0 8px">📦 الأصناف المباعة</h4><div id="rp-items"></div>
+    <h4 style="margin:15px 0 8px">💳 حسب طريقة الدفع</h4><div id="rp-pay"></div>
+    <h4 style="margin:15px 0 8px">👤 حسب مسئول الشيفت</h4><div id="rp-staff"></div>
+    <h4 style="margin:15px 0 8px">📋 تفاصيل الطلبات المدفوعة</h4><div id="rp-orders"></div>
+  </div>
+
+  <div class="admin-section">
+    <h3>👥 مسئولو الشيفت</h3>
+    <div id="users-list" style="margin:10px 0"></div>
+    <button class="btn btn-success" onclick="askMaster('add')">➕ إضافة حساب</button>
+  </div>
+
+  <div class="admin-section">
+    <h3>🍽️ إدارة المنيو</h3>
+    <button class="btn btn-success" style="margin:10px 0" onclick="editItem('')">➕ إضافة صنف</button>
+    <div id="menu-admin-list"></div>
+  </div>
+
+  <div class="admin-section">
+    <h3>🪑 إدارة الطاولات والطلبات</h3>
+    <p style="font-size:.8rem;color:#ccc">🟢 فاضية &nbsp; 🔴 عليها طلبات شغالة — دوس على طاولة تشوف طلباتها</p>
+    <div class="tables-grid" id="tables-grid"></div>
+    <div id="table-orders" style="margin-top:15px"></div>
+  </div>
+</div>
+
+<div id="lock" style="position:fixed;inset:0;z-index:900;background:var(--base);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px;text-align:center">
+  <div class="logo-box" style="font-size:2.2rem;padding:8px 26px">غَزَل</div>
+  <h2 class="brush-title" style="margin:18px 0">طاولة <span id="lock-table">1</span></h2>
+  <p style="max-width:300px;margin-bottom:12px">اطلب كود الطاولة من الكاشير عشان تقدر تطلب 💜</p>
+  <input type="text" id="lk-code" inputmode="numeric" maxlength="6" placeholder="الكود" dir="ltr" style="max-width:220px;text-align:center;font-size:1.5rem;background:#fff;color:#3b1b4a" onkeydown="if(event.key==='Enter')enterCode()">
+  <div id="lk-err" style="color:#c0392b;min-height:22px"></div>
+  <button class="btn btn-primary" style="min-width:160px" onclick="enterCode()">دخول</button>
+</div>
+<div id="toast" class="hidden" style="position:fixed;top:70px;left:50%;transform:translateX(-50%);background:#2ecc71;color:#000;padding:14px 18px;border-radius:10px;font-weight:bold;z-index:1200;box-shadow:0 6px 20px rgba(0,0,0,.5);max-width:92%;text-align:center"><span id="toast-msg"></span> <button class="btn btn-primary" style="margin-right:8px" onclick="hideToast()">تمام</button></div>
+<div id="modal-root"></div>
+
+<script src="firebase-config.js"></script>
+<script>
+/* ================= الإعدادات ================= */
+const CONFIG = {
+  MASTER_PIN: "0026",   // كود المالك: لإنشاء وحذف حسابات مسئولي الشيفت
+  TABLES: 12,           // عدد الطاولات
+  CURRENCY: "ج.م",
+  // لو سبته null يشتغل تجريبي على جهاز واحد. للتشغيل الحقيقي املاه من Firebase:
+  FIREBASE: (window.GZ_CONFIG && GZ_CONFIG.FIREBASE && GZ_CONFIG.FIREBASE.databaseURL) ? GZ_CONFIG.FIREBASE : null,
+  BG: "cream",     // خلفية المنيو: "cream" أو "lavender"
+  REQUIRE_CODE: true,  // الزبون لازم يدخل كود الطاولة (من الكاشير) قبل ما يطلب
+  VCASH_NUMBER: (window.GZ_CONFIG && GZ_CONFIG.VCASH_NUMBER) || "",  // رقم فودافون كاش للكافيه (فاضي = الخيار مخفي)
+  VAPID_KEY: (window.GZ_CONFIG && GZ_CONFIG.VAPID_KEY) || "",   // مفتاح Web Push من Firebase (لإشعارات والموبايل مقفول)
+  /* مثال:
+  FIREBASE: { apiKey:"...", authDomain:"...", databaseURL:"https://xxxx-default-rtdb.firebaseio.com", projectId:"...", appId:"..." }
+  */
+};
+
+const DEFAULT_ITEMS = [
+  {id:"c1",cat:"☕ مشروبات ساخنة",name:"قهوة تركي",price:35,emoji:"☕"},
+  {id:"c2",cat:"☕ مشروبات ساخنة",name:"نسكافيه",price:30,emoji:"☕"},
+  {id:"c3",cat:"☕ مشروبات ساخنة",name:"شاي",price:20,emoji:"🍵"},
+  {id:"c4",cat:"☕ مشروبات ساخنة",name:"لاتيه",price:50,emoji:"🥛"},
+  {id:"d1",cat:"🧊 مشروبات باردة",name:"آيس كوفي",price:55,emoji:"🧋"},
+  {id:"d2",cat:"🧊 مشروبات باردة",name:"عصير برتقال",price:40,emoji:"🍊"},
+  {id:"d3",cat:"🧊 مشروبات باردة",name:"ليمون بالنعناع",price:35,emoji:"🍋"},
+  {id:"s1",cat:"🍰 حلويات",name:"تشيز كيك",price:65,emoji:"🍰"},
+  {id:"s2",cat:"🍰 حلويات",name:"براونيز",price:55,emoji:"🍫"},
+  {id:"s3",cat:"🍰 حلويات",name:"وافل",price:70,emoji:"🧇"}
+];
+let ALL = DEFAULT_ITEMS.slice();
+const STATUS = {
+  new:{t:"✅ تم استلام طلبك",c:"#2b6cb0"},
+  preparing:{t:"👨‍🍳 جاري تحضير طلبك",c:"#b9770e"},
+  ready:{t:"🎉 طلبك جاهز ويتم تقديمه",c:"#1e8449"},
+  done:{t:"💜 تم الدفع - شكراً لزيارتك",c:"#95a5a6"}
+};
+
+/* ================= طبقة البيانات ================= */
+const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+let orders = {}, users = {}, sessions = {}, sessLoaded = false, currentUser = null, dayStart = 0, firebaseOn = false, dbRef = null;
+
+function initStore(cb) {
+  if (CONFIG.FIREBASE && window.firebase) {
+    firebase.initializeApp(CONFIG.FIREBASE);
+    dbRef = firebase.database().ref("cafe");
+    firebaseOn = true;
+    firebase.database().ref(".info/connected").on("value", s => netWarn(s.val() ? "" : "⚠️ مفيش اتصال بالنظام — الطلبات مش هتوصل للكاشير لحد ما الاتصال يرجع"));
+    dbRef.child("orders").on("value", s => { orders = s.val() || {}; cb(); });
+    dbRef.child("dayStart").on("value", s => { dayStart = s.val() || 0; cb(); });
+    dbRef.child("users").on("value", s => { users = s.val() || {}; cb(); });
+    dbRef.child("sessions").on("value", s => { sessions = s.val() || {}; sessLoaded = true; cb(); });
+    dbRef.child("menu").on("value", s => { const v = s.val(); if (v) setMenu(v.items || []); cb(); });
+  } else {
+    netWarn("⚠️ النظام مش مربوط بقاعدة البيانات — الطلبات مش هتوصل للكاشير");
+    const load = () => {
+      try { orders = JSON.parse(localStorage.getItem("gz_orders")) || {}; dayStart = +localStorage.getItem("gz_day") || 0;
+        const m = localStorage.getItem("gz_menu"); if (m) setMenu(JSON.parse(m));
+        users = JSON.parse(localStorage.getItem("gz_users")) || {}; }
+      catch (e) { orders = {}; }
+      cb();
+    };
+    window.addEventListener("storage", load); load();
+  }
+}
+function saveLocal() { try { localStorage.setItem("gz_orders", JSON.stringify(orders)); localStorage.setItem("gz_day", dayStart); } catch (e) {} }
+function addOrder(o) {
+  if (firebaseOn) return dbRef.child("orders").push(o).key;
+  const id = "o" + Date.now(); orders[id] = o; saveLocal(); render(); return id;
+}
+function patchOrder(id, p) {
+  if (firebaseOn) dbRef.child("orders/" + id).update(p);
+  else { Object.assign(orders[id], p); saveLocal(); render(); }
+}
+function patchMany(ids, p) {
+  if (firebaseOn) { const u = {}; ids.forEach(id => Object.entries(p).forEach(([k, v]) => u["orders/" + id + "/" + k] = v)); dbRef.update(u); }
+  else { ids.forEach(id => Object.assign(orders[id], p)); saveLocal(); render(); }
+}
+function writeUser(id, rec) {
+  if (firebaseOn) dbRef.child("users/" + id).set(rec);
+  else { users[id] = rec; try { localStorage.setItem("gz_users", JSON.stringify(users)); } catch (e) {} render(); }
+}
+function removeUser(id) {
+  if (firebaseOn) dbRef.child("users/" + id).remove();
+  else { delete users[id]; try { localStorage.setItem("gz_users", JSON.stringify(users)); } catch (e) {} render(); }
+}
+function setDayStart(t) {
+  if (firebaseOn) dbRef.child("dayStart").set(t);
+  else { dayStart = t; saveLocal(); render(); }
+}
+
+function netWarn(m) { const b = document.getElementById("net-warn"); b.textContent = m || ""; b.classList.toggle("hidden", !m); }
+function setMenu(arr) {
+  ALL = (Array.isArray(arr) ? arr : Object.values(arr || {})).filter(i => i && /^[\w-]+$/.test(i.id) && i.name && +i.price >= 0);
+  Object.keys(cart).forEach(id => { if (!ALL.find(i => i.id === id)) delete cart[id]; });
+  renderMenu(); updateBadge(); if (cashierOpen) renderMenuAdmin();
+}
+function saveMenu(arr) {
+  if (firebaseOn) dbRef.child("menu").set({v: 1, items: arr});
+  else {
+    try { localStorage.setItem("gz_menu", JSON.stringify(arr)); }
+    catch (e) { alert("مساحة التخزين مليانة، قلل حجم الصور."); return; }
+    setMenu(arr);
+  }
+}
+
+/* ================= رقم الطاولة من الرابط ================= */
+const params = new URLSearchParams(location.search);
+let tableNum = parseInt(params.get("table"), 10);
+if (!(tableNum >= 1 && tableNum <= CONFIG.TABLES)) tableNum = 1;
+document.getElementById("table-num").textContent = tableNum;
+document.body.dataset.bg = CONFIG.BG || "cream";
+document.getElementById("lock-table").textContent = tableNum;
+
+/* ================= المنيو والسلة ================= */
+let cart = {};
+const imgOrEmoji = i => (typeof i.img === "string" && i.img.startsWith("data:image/")) ? `<img src="${esc(i.img)}" alt="">` : esc(i.emoji || "🍽️");
+function renderMenu() {
+  const cats = [...new Set(ALL.map(i => i.cat || "أخرى"))];
+  document.getElementById("menu-container").innerHTML = cats.length ? cats.map(c => `
+    <h3 class="cat-brush">${esc(c)}</h3>
+    <div class="menu-grid">${ALL.filter(i => (i.cat || "أخرى") === c).map(i => `
+      <div class="card"><div class="card-img">${imgOrEmoji(i)}</div>
+        <div class="card-body"><b>${esc(i.name)}</b>
+          <span class="price">${+i.price} ${CONFIG.CURRENCY}</span>
+          <button class="btn btn-primary" onclick="addToCart('${i.id}')">+ أضف</button>
+        </div></div>`).join("")}</div>`).join("")
+    : `<p style="padding:20px;color:#7a5a8c">المنيو فاضي حالياً.</p>`;
+}
+function addToCart(id) { cart[id] = (cart[id] || 0) + 1; updateBadge(); }
+function changeQty(id, d) { cart[id] = (cart[id] || 0) + d; if (cart[id] <= 0) delete cart[id]; updateBadge(); openCartModal(); }
+function updateBadge() { document.getElementById("cart-badge-count").textContent = Object.values(cart).reduce((a, b) => a + b, 0); }
+const cartTotal = () => Object.entries(cart).reduce((s, [id, q]) => s + ALL.find(i => i.id === id).price * q, 0);
+
+function showModal(html) {
+  document.getElementById("modal-root").innerHTML = `<div class="modal" onclick="if(event.target===this)closeModal()"><div class="modal-card">${html}</div></div>`;
+}
+function closeModal() { document.getElementById("modal-root").innerHTML = ""; }
+
+function openCartModal() {
+  const ids = Object.keys(cart);
+  const body = ids.length ? ids.map(id => { const i = ALL.find(x => x.id === id); return `
+    <div class="cart-item"><span>${esc(i.emoji || "🍽️")} ${esc(i.name)}</span>
+      <span><button class="qty-btn" onclick="changeQty('${id}',-1)">−</button>
+      <b style="margin:0 8px">${cart[id]}</b>
+      <button class="qty-btn" onclick="changeQty('${id}',1)">+</button></span>
+      <span>${i.price * cart[id]}</span></div>`; }).join("")
+    + `<h3 style="margin:12px 0">الإجمالي: ${cartTotal()} ${CONFIG.CURRENCY}</h3>
+       <div style="margin-bottom:12px"><b>طريقة الدفع:</b><div style="display:flex;gap:8px;margin-top:6px">
+         <button class="btn ${payMethod === "cash" ? "btn-success" : "btn-primary"}" style="flex:1" onclick="payMethod='cash';openCartModal()">💵 كاش للكاشير</button>
+         ${CONFIG.VCASH_NUMBER ? `<button class="btn ${payMethod === "vcash" ? "btn-success" : "btn-primary"}" style="flex:1" onclick="payMethod='vcash';openCartModal()">📱 فودافون كاش</button>` : ""}</div></div>
+       <button class="btn btn-success" style="width:100%" onclick="submitOrder()">إرسال الطلب ✅</button>`
+    : `<p style="text-align:center;color:#ccc;padding:20px">السلة فاضية، اختار من المنيو ☕</p>`;
+  showModal(`<h3>🛒 سلتك - طاولة ${tableNum}</h3><div style="margin-top:12px">${body}</div>
+    <button class="btn btn-danger" style="width:100%;margin-top:10px" onclick="closeModal()">إغلاق</button>`);
+}
+function submitOrder() {
+  if (!Object.keys(cart).length) return;
+  if (firebaseOn && CONFIG.REQUIRE_CODE && !sessOK) { closeModal(); checkLock(); return; }
+  unlockAudio(); const tokenP = pushToken(); if (!firebaseOn) askNotify();
+  const tot = cartTotal(), method = CONFIG.VCASH_NUMBER ? payMethod : "cash";
+  const newId = addOrder({
+    table: tableNum, status: "new", ts: Date.now(), total: cartTotal(), pay: method,
+    items: Object.entries(cart).map(([id, q]) => { const i = ALL.find(x => x.id === id); return {name: i.name, price: i.price, qty: q}; })
+  });
+  tokenP.then(t => { if (t && newId) patchOrder(newId, {fcm: t}); });
+  cart = {}; updateBadge();
+  if (method === "vcash") { showVcash(newId, tot); return; }
+  showModal(`<h3 style="text-align:center">✅ تم إرسال طلبك!</h3><p style="text-align:center;margin:12px 0">هتلاقي حالة الطلب أعلى الصفحة.</p>
+    <button class="btn btn-primary" style="width:100%" onclick="closeModal()">تمام</button>`);
+}
+
+/* ================= الكاشير ================= */
+let cashierOpen = false, selTable = null, tries = 0, lockUntil = 0;
+const $ = id => document.getElementById(id);
+const NAME_RE = /^[\w\u0600-\u06FF]{3,20}$/;
+async function hashPw(p, salt) {
+  const d = new TextEncoder().encode(salt + ":" + p);
+  if (window.crypto && crypto.subtle) { const h = await crypto.subtle.digest("SHA-256", d); return [...new Uint8Array(h)].map(b => b.toString(16).padStart(2, "0")).join(""); }
+  let h = 5381; for (const b of d) h = ((h << 5) + h + b) | 0; return "x" + (h >>> 0).toString(16);
+}
+function guard(errId) { if (Date.now() < lockUntil) { $(errId).textContent = "محاولات كتير غلط، استنى 30 ثانية"; return false; } return true; }
+function fail(errId, msg) { if (++tries >= 5) { lockUntil = Date.now() + 30000; tries = 0; msg = "محاولات كتير غلط، استنى 30 ثانية"; } $(errId).textContent = msg; }
+
+function openCashier() {
+  if (currentUser) { showCashier(); return; }
+  showModal(`<h3>🔐 دخول مسئول الشيفت</h3>
+    <input type="text" id="lg-user" placeholder="اسم المستخدم" autocomplete="username">
+    <input type="password" id="lg-pass" placeholder="كلمة المرور" autocomplete="current-password" onkeydown="if(event.key==='Enter')doLogin()">
+    <div id="lg-err" style="color:#e74c3c;min-height:22px"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="doLogin()">دخول</button>
+    <button class="btn btn-warning" style="width:100%;margin-top:8px" onclick="askMaster('add')">➕ إنشاء حساب جديد</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">إلغاء</button>`);
+  setTimeout(() => $("lg-user") && $("lg-user").focus(), 50);
+}
+async function doLogin() {
+  unlockAudio();
+  if (!guard("lg-err")) return;
+  const u = fv("lg-user").trim().toLowerCase(), rec = NAME_RE.test(u) ? users[u] : null;
+  if (!rec || (await hashPw(fv("lg-pass"), rec.salt)) !== rec.hash) { fail("lg-err", users && Object.keys(users).length ? "اسم المستخدم أو كلمة المرور غلط" : "مفيش حسابات لسه، أنشئ أول حساب بالكود الرئيسي"); return; }
+  tries = 0; currentUser = {id: u, name: rec.name || u}; closeModal(); showCashier();
+}
+function backModal() { if (currentUser) closeModal(); else openCashier(); }
+function askMaster(act, id) {
+  showModal(`<h3>🔑 الكود الرئيسي</h3>
+    <p style="font-size:.85rem;color:#ccc">إنشاء وحذف الحسابات محتاج كود المالك.</p>
+    <input type="password" id="mp-in" inputmode="numeric" placeholder="الكود الرئيسي" onkeydown="if(event.key==='Enter')masterOk('${act}','${id || ""}')">
+    <div id="mp-err" style="color:#e74c3c;min-height:22px"></div>
+    <button class="btn btn-primary" style="width:100%" onclick="masterOk('${act}','${id || ""}')">متابعة</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="backModal()">رجوع</button>`);
+  setTimeout(() => $("mp-in") && $("mp-in").focus(), 50);
+}
+function masterOk(act, id) {
+  if (!guard("mp-err")) return;
+  if (fv("mp-in") !== CONFIG.MASTER_PIN) { fail("mp-err", "الكود الرئيسي غلط"); return; }
+  tries = 0;
+  if (act === "del") { removeUser(id); backModal(); } else newUserForm();
+}
+function newUserForm() {
+  showModal(`<h3>➕ حساب مسئول شيفت جديد</h3>
+    <input type="text" id="nu-name" placeholder="الاسم (يظهر في التقارير)">
+    <input type="text" id="nu-user" dir="ltr" placeholder="اسم المستخدم (3-20 حرف أو رقم)" autocomplete="off">
+    <input type="password" id="nu-pass" placeholder="كلمة المرور (4 حروف على الأقل)" autocomplete="new-password">
+    <input type="password" id="nu-pass2" placeholder="أعد كتابة كلمة المرور" autocomplete="new-password">
+    <div id="nu-err" style="color:#e74c3c;min-height:22px"></div>
+    <button class="btn btn-success" style="width:100%" onclick="saveNewUser()">حفظ الحساب</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="backModal()">رجوع</button>`);
+}
+async function saveNewUser() {
+  const name = fv("nu-name").trim(), u = fv("nu-user").trim().toLowerCase(), p = fv("nu-pass");
+  if (!name) return $("nu-err").textContent = "اكتب الاسم";
+  if (!NAME_RE.test(u)) return $("nu-err").textContent = "اسم المستخدم من 3 لـ 20 حرف أو رقم من غير مسافات";
+  if (users[u]) return $("nu-err").textContent = "اسم المستخدم ده مستخدم قبل كده";
+  if (p.length < 4) return $("nu-err").textContent = "كلمة المرور قصيرة";
+  if (p !== fv("nu-pass2")) return $("nu-err").textContent = "كلمتا المرور مش متطابقتين";
+  const salt = Array.from(crypto.getRandomValues ? crypto.getRandomValues(new Uint8Array(8)) : [Math.random() * 255 | 0], b => b.toString(16)).join("");
+  writeUser(u, {name, salt, hash: await hashPw(p, salt), createdAt: Date.now()});
+  closeModal();
+  if (!currentUser) { currentUser = {id: u, name}; showCashier(); }
+}
+function renderUsers() {
+  const ks = Object.keys(users).filter(k => NAME_RE.test(k));
+  $("users-list").innerHTML = ks.length ? ks.map(k => `<div class="cart-item"><span>👤 <b>${esc(users[k].name || k)}</b> <small style="color:#ccc">(${esc(k)})</small></span>
+    <button class="btn btn-danger" onclick="askMaster('del','${k}')">حذف</button></div>`).join("") : `<p style="color:#ccc">مفيش حسابات.</p>`;
+}
+
+function showCashier() {
+  cashierOpen = true; document.body.classList.add("cashier");
+  ["customer-view", "floating-cart-btn", "secret-cashier-trigger", "table-badge"].forEach(id => document.getElementById(id).classList.add("hidden"));
+  document.getElementById("cashier-view").classList.remove("hidden");
+  document.getElementById("mode-warn").classList.toggle("hidden", firebaseOn);
+  $("who").textContent = "👤 " + currentUser.name;
+  refreshPushBtn();
+  if (!$("rp-from").value) quick("today");
+  render();
+}
+function closeCashier() {
+  cashierOpen = false; currentUser = null; selTable = null; document.body.classList.remove("cashier");
+  ["customer-view", "floating-cart-btn", "secret-cashier-trigger", "table-badge"].forEach(id => document.getElementById(id).classList.remove("hidden"));
+  document.getElementById("cashier-view").classList.add("hidden");
+  render();
+}
+function toggleFullscreen() {
+  if (!document.fullscreenElement) document.documentElement.requestFullscreen?.(); else document.exitFullscreen?.();
+}
+const list = () => Object.entries(orders).map(([id, o]) => ({id, ...o})).sort((a, b) => a.ts - b.ts);
+const itemsText = o => (o.items || []).map(i => `${esc(i.name)} ×${i.qty}`).join("، ");
+
+function setStatus(id, s) { patchOrder(id, {status: s}); }
+function startPrep(id) {
+  const m = Math.max(1, Math.min(180, parseInt(document.getElementById("eta-" + id).value, 10) || 10));
+  patchOrder(id, {status: "preparing", etaMin: m, etaAt: Date.now() + m * 60000});
+}
+function statusText(o) {
+  if (o.status === "preparing" && o.etaAt) {
+    const m = Math.ceil((o.etaAt - Date.now()) / 60000);
+    return m > 0 ? `👨‍🍳 جاري التحضير — باقي حوالي ${m} دقيقة` : "👨‍🍳 جاري التحضير — على وشك الانتهاء";
+  }
+  return STATUS[o.status].t;
+}
+function closeTable(t) {
+  const act = list().filter(o => o.table === t && o.status !== "done");
+  if (!act.length) return;
+  const total = act.reduce((x, o) => x + o.total, 0);
+  showModal(`<h3>💰 دفع طاولة ${t}</h3>
+    <p style="margin:12px 0">${act.length} طلب — الإجمالي: <b>${total} ${CONFIG.CURRENCY}</b></p>${vcLine(act)}
+    <button class="btn btn-success" style="width:100%" onclick="confirmPay(${t})">تأكيد استلام ${total} ${CONFIG.CURRENCY}</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">إلغاء</button>`);
+}
+function confirmPay(t) {
+  const ids = list().filter(o => o.table === t && o.status !== "done").map(o => o.id);
+  if (ids.length) patchMany(ids, {status: "done", paidAt: Date.now(), paidBy: currentUser ? currentUser.id : "", paidByName: currentUser ? currentUser.name : ""});
+  revokeCode(t);
+  closeModal();
+}
+function resetDailyInventory() {
+  if (confirm("تصفير الجرد؟ الطلبات القديمة هتتشال من الإحصائيات.")) setDayStart(Date.now());
+}
+
+function renderCashier() {
+  renderMenuAdmin();
+  const all = list(); renderReport(); renderUsers();
+  const busy = new Set(all.filter(o => o.status !== "done").map(o => o.table));
+  document.getElementById("tables-grid").innerHTML = Array.from({length: CONFIG.TABLES}, (_, k) => k + 1).map(t =>
+    `<div class="table-box ${busy.has(t) ? "busy" : ""} ${selTable === t ? "selected" : ""}" onclick="selTable=${t};render()">طاولة ${t}${sessions[t] ? " 🔑" : ""}</div>`).join("");
+
+  const box = document.getElementById("table-orders");
+  if (!selTable) { box.innerHTML = ""; return; }
+  const act = all.filter(o => o.table === selTable && o.status !== "done");
+  box.innerHTML = codeBox(selTable) + `<h4>طلبات طاولة ${selTable}</h4>` + (act.length ? act.map(o => `
+    <div class="order-card"><div>${itemsText(o)}</div>
+      <div style="margin:6px 0;color:#f1c40f">${o.total} ${CONFIG.CURRENCY} — ${statusText(o)}</div>
+      ${o.pay === "vcash" ? `<div style="margin:4px 0">📱 فودافون كاش: ${o.vcOk ? "✅ تم التأكيد" : (o.vcSent ? "العميل بيقول حوّل (آخر 4: " + esc(o.payRef || "—") + ")" : "لسه مش محوّل")} ${o.vcOk ? "" : `<button class="btn btn-success" onclick="patchOrder('${o.id}',{vcOk:true})">✅ تم استلام التحويل</button>`}</div>` : ""}
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <label>الوقت (دقيقة):</label>
+        <input type="number" id="eta-${o.id}" min="1" max="180" value="${o.etaMin || 10}" style="width:80px;padding:6px;border-radius:5px;border:1px solid #888;background:#1a1a1a;color:#fff">
+        <button class="btn btn-warning" onclick="startPrep('${o.id}')">ابدأ التحضير</button>
+        <button class="btn btn-success" onclick="setStatus('${o.id}','ready')">جاهز ✅ ابعت إشعار</button></div></div>`).join("")
+    + `<button class="btn btn-primary" onclick="closeTable(${selTable})">💰 تم الدفع وإغلاق الطاولة</button>`
+    : `<p style="color:#ccc">مفيش طلبات شغالة على الطاولة دي.</p>`);
+}
+
+/* ================= الجرد والتقارير ================= */
+const dkey = x => { const d = new Date(x); return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0"); };
+function quick(k) {
+  const n = new Date(), y = n.getFullYear(), m = n.getMonth(), d = n.getDate();
+  if (k === "all") { $("rp-from").value = ""; $("rp-to").value = ""; return renderReport(); }
+  let f = n, t = n;
+  if (k === "yday") f = t = new Date(y, m, d - 1);
+  else if (k === "week") f = new Date(y, m, d - 6);
+  else if (k === "month") f = new Date(y, m, 1);
+  $("rp-from").value = dkey(f); $("rp-to").value = dkey(t); renderReport();
+}
+function paidRows() {
+  const f = $("rp-from").value, t = $("rp-to").value;
+  return list().filter(o => o.status === "done").map(o => ({...o, at: o.paidAt || o.ts}))
+    .filter(o => { const k = dkey(o.at); return (!f || k >= f) && (!t || k <= t); }).sort((a, b) => b.at - a.at);
+}
+function tbl(heads, rows) {
+  return `<div class="table-wrap"><table class="hr-table"><thead><tr>${heads.map(h => `<th>${h}</th>`).join("")}</tr></thead><tbody>${rows.length
+    ? rows.map(r => `<tr>${r.map(c => `<td>${c}</td>`).join("")}</tr>`).join("")
+    : `<tr><td colspan="${heads.length}" style="color:#aaa">مفيش بيانات في الفترة دي.</td></tr>`}</tbody></table></div>`;
+}
+function renderReport() {
+  const rows = paidRows(), rev = rows.reduce((x, o) => x + o.total, 0), cur = " " + CONFIG.CURRENCY;
+  $("stat-revenue").textContent = rev; $("stat-count").textContent = rows.length; $("stat-avg").textContent = rows.length ? Math.round(rev / rows.length) : 0;
+  const days = Object.create(null), items = Object.create(null), staff = Object.create(null), pays = Object.create(null);
+  rows.forEach(o => {
+    const k = dkey(o.at), w = o.paidByName || "—";
+    (days[k] = days[k] || {n: 0, r: 0}).n++; days[k].r += o.total;
+    (staff[w] = staff[w] || {n: 0, r: 0}).n++; staff[w].r += o.total;
+    const pm = o.pay === "vcash" ? "📱 فودافون كاش" : "💵 كاش"; (pays[pm] = pays[pm] || {n: 0, r: 0}).n++; pays[pm].r += o.total;
+    (o.items || []).forEach(i => { (items[i.name] = items[i.name] || {q: 0, r: 0}); items[i.name].q += i.qty; items[i.name].r += i.qty * i.price; });
+  });
+  const wd = k => new Date(k + "T00:00:00").toLocaleDateString("ar-EG", {weekday: "long"});
+  $("rp-days").innerHTML = tbl(["التاريخ", "الطلبات", "الإيراد"], Object.keys(days).sort().reverse().map(k => [wd(k) + " " + k, days[k].n, days[k].r + cur]));
+  $("rp-items").innerHTML = tbl(["الصنف", "الكمية", "الإيراد"], Object.entries(items).sort((a, b) => b[1].q - a[1].q).map(([n, v]) => [esc(n), v.q, v.r + cur]));
+  $("rp-pay").innerHTML = tbl(["طريقة الدفع", "الطلبات", "الإيراد"], Object.entries(pays).map(([n, v]) => [n, v.n, v.r + cur]));
+  $("rp-staff").innerHTML = tbl(["المسئول", "الطلبات", "الإيراد"], Object.entries(staff).map(([n, v]) => [esc(n), v.n, v.r + cur]));
+  $("rp-orders").innerHTML = tbl(["الوقت", "الطاولة", "الأصناف", "الإجمالي", "المسئول"],
+    rows.map(o => [new Date(o.at).toLocaleString("ar-EG", {dateStyle: "short", timeStyle: "short"}), o.table, itemsText(o), o.total, esc(o.paidByName || "—")]));
+}
+function exportCSV() {
+  const rows = [["التاريخ", "الوقت", "الطاولة", "الأصناف", "الإجمالي", "المسئول", "الدفع"], ...paidRows().map(o => { const d = new Date(o.at);
+    return [dkey(d), d.toLocaleTimeString("ar-EG"), o.table, (o.items || []).map(i => i.name + " x" + i.qty).join(" | "), o.total, o.paidByName || "", o.pay === "vcash" ? "فودافون كاش" : "كاش"]; })];
+  const csv = "\ufeff" + rows.map(r => r.map(c => '"' + String(c).replace(/"/g, '""') + '"').join(",")).join("\r\n");
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(new Blob([csv], {type: "text/csv;charset=utf-8"})); a.download = "ghazal-report-" + dkey(new Date()) + ".csv"; a.click();
+}
+
+/* ================= إدارة المنيو ================= */
+function renderMenuAdmin() {
+  document.getElementById("menu-admin-list").innerHTML = ALL.length ? ALL.map(i => `
+    <div class="cart-item"><span style="display:flex;align-items:center;gap:8px"><span class="thumb">${imgOrEmoji(i)}</span>
+      <span><b>${esc(i.name)}</b><br><small style="color:#ccc">${esc(i.cat || "")} — ${+i.price} ${CONFIG.CURRENCY}</small></span></span>
+      <span><button class="btn btn-warning" onclick="editItem('${i.id}')">تعديل</button>
+      <button class="btn btn-danger" onclick="deleteItem('${i.id}')">حذف</button></span></div>`).join("")
+    : `<p style="color:#ccc">مفيش أصناف. دوس "إضافة صنف".</p>`;
+}
+let formImg = "";
+const fv = id => document.getElementById(id).value;
+function editItem(id) {
+  const i = id ? ALL.find(x => x.id === id) : {};
+  formImg = i.img || "";
+  const cats = [...new Set(ALL.map(x => x.cat).filter(Boolean))];
+  showModal(`<h3>${id ? "✏️ تعديل صنف" : "➕ إضافة صنف"}</h3>
+    <input type="text" id="f-name" placeholder="اسم الصنف" value="${esc(i.name || "")}">
+    <input type="text" id="f-price" inputmode="decimal" placeholder="السعر" value="${i.price ?? ""}">
+    <input type="text" id="f-cat" list="cat-list" placeholder="القسم (مثال: مشروبات ساخنة)" value="${esc(i.cat || "")}">
+    <datalist id="cat-list">${cats.map(c => `<option value="${esc(c)}">`).join("")}</datalist>
+    <input type="text" id="f-emoji" placeholder="إيموجي (يظهر لو مفيش صورة)" value="${esc(i.emoji || "")}">
+    <div id="f-prev" class="img-prev"></div>
+    <input type="file" id="f-file" accept="image/*" onchange="pickImg(this)" style="margin:8px 0;width:100%">
+    <button class="btn btn-danger" onclick="formImg='';prevImg()">إزالة الصورة</button>
+    <div id="f-err" style="color:#e74c3c;min-height:22px;margin:6px 0"></div>
+    <button class="btn btn-success" style="width:100%" onclick="saveItem('${id || ""}')">حفظ</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">إلغاء</button>`);
+  prevImg();
+}
+function prevImg() { document.getElementById("f-prev").innerHTML = formImg ? `<img src="${esc(formImg)}" alt="">` : ""; }
+function pickImg(inp) {
+  const f = inp.files[0]; if (!f) return;
+  const r = new FileReader();
+  r.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const s = Math.min(1, 400 / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * s); c.height = Math.round(im.height * s);
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+      formImg = c.toDataURL("image/jpeg", 0.75); prevImg();
+    };
+    im.onerror = () => { document.getElementById("f-err").textContent = "الصورة دي مش مدعومة، جرب صورة تانية"; };
+    im.src = r.result;
+  };
+  r.readAsDataURL(f);
+}
+function saveItem(id) {
+  const name = fv("f-name").trim(), price = parseFloat(fv("f-price").replace(",", "."));
+  if (!name || !(price >= 0)) { document.getElementById("f-err").textContent = "اكتب اسم الصنف وسعر صحيح"; return; }
+  const it = {id: id || "i" + Date.now(), name, price, cat: fv("f-cat").trim() || "أخرى", emoji: fv("f-emoji").trim() || "🍽️", img: formImg};
+  saveMenu(id ? ALL.map(x => x.id === id ? it : x) : [...ALL, it]);
+  closeModal();
+}
+function deleteItem(id) { if (confirm("حذف الصنف ده من المنيو؟")) saveMenu(ALL.filter(x => x.id !== id)); }
+
+/* ================= حالة الطلب عند الزبون ================= */
+function renderCustomer() {
+  const mine = list().filter(o => o.table === tableNum && o.status !== "done");
+  const box = document.getElementById("customer-notification");
+  box.classList.toggle("hidden", !mine.length);
+  document.getElementById("customer-status-text").innerHTML = mine.map(o =>
+    `<div style="color:${STATUS[o.status].c};margin:4px 0">${statusText(o)}</div>`).join("");
+}
+let actx; const seen = {};
+const snd = new Audio("notify.wav");
+function unlockAudio() {
+  try { actx = actx || new (window.AudioContext || window.webkitAudioContext)(); actx.resume && actx.resume(); } catch (e) {}
+  try { snd.muted = true; snd.play().then(() => { snd.pause(); snd.currentTime = 0; snd.muted = false; }).catch(() => { snd.muted = false; }); } catch (e) {}
+}
+function playSound() { try { snd.currentTime = 0; const pr = snd.play(); if (pr) pr.catch(beep); } catch (e) { beep(); } }
+function askNotify() { try { if ("Notification" in window && Notification.permission === "default") Notification.requestPermission(); } catch (e) {} }
+function beep() {
+  if (!actx) return;
+  [0, .25, .5].forEach(t => { const o = actx.createOscillator(), g = actx.createGain(); o.frequency.value = 880; g.gain.value = .2;
+    o.connect(g); g.connect(actx.destination); o.start(actx.currentTime + t); o.stop(actx.currentTime + t + .15); });
+}
+function showToast(m) { document.getElementById("toast-msg").textContent = m; document.getElementById("toast").classList.remove("hidden"); document.title = "🔔 " + m; }
+function hideToast() { document.getElementById("toast").classList.add("hidden"); document.title = "Ghazal Space - Smart Café"; }
+function notifyReady(o) {
+  const msg = "طلبك جاهز! ☕ طاولة " + tableNum;
+  playSound(); try { navigator.vibrate && navigator.vibrate([300, 150, 300, 150, 500]); } catch (e) {}
+  showToast(msg);
+  try { if ("Notification" in window && Notification.permission === "granted") new Notification("Ghazal Space", {body: "اتفضل، طلبك خلص 💜", tag: "ready-" + o.id}); } catch (e) {}
+}
+const known = new Set(); let knownInit = false;
+function checkNotify() {
+  const all = list();
+  all.forEach(o => {
+    if (!known.has(o.id)) { known.add(o.id); if (knownInit && cashierOpen && o.status === "new") { playSound(); showToast("🛎️ طلب جديد - طاولة " + o.table); } }
+  });
+  knownInit = true;
+  all.filter(o => o.table === tableNum).forEach(o => {
+    if (!cashierOpen && seen[o.id] !== undefined && seen[o.id] !== "ready" && o.status === "ready") notifyReady(o);
+    seen[o.id] = o.status;
+  });
+}
+let sessOK = false, payMethod = "cash";
+function checkLock() {
+  const on = firebaseOn && CONFIG.REQUIRE_CODE;
+  let ok = !on;
+  if (on && sessLoaded) {
+    const s = sessions[tableNum]; let saved = null;
+    try { saved = JSON.parse(localStorage.getItem("gz_sess")); } catch (e) {}
+    ok = !!(s && saved && saved.table === tableNum && String(saved.code) === String(s.code));
+  }
+  sessOK = ok;
+  $("lock").classList.toggle("hidden", ok || cashierOpen);
+  if (!cashierOpen) $("floating-cart-btn").classList.toggle("hidden", !ok);
+}
+function enterCode() {
+  if (!guard("lk-err")) return;
+  const c = fv("lk-code").trim(), s = sessions[tableNum];
+  if (s && c === String(s.code)) { try { localStorage.setItem("gz_sess", JSON.stringify({table: tableNum, code: s.code})); } catch (e) {} tries = 0; $("lk-code").value = ""; render(); }
+  else fail("lk-err", sessLoaded ? "الكود غلط، اسأل الكاشير" : "استنى ثانية وحاول تاني");
+}
+function issueCode(t) {
+  const code = String(1000 + crypto.getRandomValues(new Uint32Array(1))[0] % 9000);
+  dbRef.child("sessions/" + t).set({code, ts: Date.now(), by: currentUser ? currentUser.id : ""});
+}
+function revokeCode(t) { if (firebaseOn) dbRef.child("sessions/" + t).remove(); }
+function codeBox(t) {
+  if (!(firebaseOn && CONFIG.REQUIRE_CODE)) return "";
+  const s = sessions[t];
+  return `<div style="background:rgba(0,0,0,.25);padding:10px;border-radius:8px;margin-bottom:10px">🔑 كود الطاولة: <b style="font-size:1.5rem;letter-spacing:4px">${s ? esc(s.code) : "—"}</b>
+    <button class="btn btn-primary" onclick="issueCode(${t})">${s ? "كود جديد" : "إصدار كود"}</button>${s ? ` <button class="btn btn-danger" onclick="revokeCode(${t})">إلغاء</button>` : ""}</div>`;
+}
+function vcLine(act) {
+  const v = act.filter(o => o.pay === "vcash"); if (!v.length) return "";
+  const tot = v.reduce((x, o) => x + o.total, 0), pend = v.filter(o => !o.vcOk).length;
+  return `<p style="color:#f1c40f">📱 فودافون كاش: ${tot} ${CONFIG.CURRENCY}${pend ? ` — ⚠️ ${pend} تحويل لسه مش مؤكد` : " — ✅ مؤكد"}</p>`;
+}
+function showVcash(id, tot) {
+  showModal(`<h3 style="text-align:center">📱 الدفع بفودافون كاش</h3>
+    <p style="text-align:center;margin:10px 0">حوّل <b>${tot} ${CONFIG.CURRENCY}</b> على الرقم:</p>
+    <div style="background:#1a1a1a;border:2px dashed #f1c40f;padding:12px;border-radius:10px;text-align:center;font-size:1.5rem;letter-spacing:2px;direction:ltr">${esc(CONFIG.VCASH_NUMBER)}</div>
+    <button class="btn btn-warning" style="width:100%;margin:10px 0" onclick="copyVcash(this)">نسخ الرقم 📋</button>
+    <p style="font-size:.85rem;color:#ccc;margin-bottom:6px">بعد التحويل اكتب آخر 4 أرقام من المحفظة اللي حولت منها عشان الكاشير يتأكد:</p>
+    <input type="text" id="vc-ref" inputmode="numeric" maxlength="4" placeholder="آخر 4 أرقام" dir="ltr">
+    <button class="btn btn-success" style="width:100%" onclick="saveVcRef('${id}')">تم التحويل ✅</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">هحوّل بعدين</button>`);
+}
+function copyVcash(b) { try { navigator.clipboard.writeText(CONFIG.VCASH_NUMBER); b.textContent = "تم النسخ ✅"; } catch (e) {} }
+function saveVcRef(id) { patchOrder(id, {payRef: fv("vc-ref").replace(/\D/g, "").slice(0, 4), vcSent: true}); closeModal(); }
+function render() { checkLock(); checkNotify(); renderCustomer(); if (cashierOpen) renderCashier(); }
+setInterval(() => { if (!cashierOpen) renderCustomer(); }, 15000);
+
+/* ================= QR لكل طاولة ================= */
+function getBase() {
+  let b = CONFIG.BASE_URL || "";
+  try { b = b || localStorage.getItem("gz_base") || ""; } catch (e) {}
+  if (!b && /^https?:$/.test(location.protocol)) b = location.origin + location.pathname;
+  return b;
+}
+function drawQR() {
+  const base = getBase(), grid = document.getElementById("qr-grid"), warn = document.getElementById("qr-warn");
+  grid.innerHTML = "";
+  if (!/^https?:\/\//i.test(base)) { warn.textContent = "اكتب رابط الموقع الحقيقي (يبدأ بـ https://) الأول، عشان الـ QR يفتح التطبيق مش يطلع نص."; return; }
+  warn.textContent = "";
+  for (let t = 1; t <= CONFIG.TABLES; t++) {
+    const url = base + "?table=" + t, d = document.createElement("div"); d.className = "qr-item";
+    d.innerHTML = `طاولة ${t}<div class="q"></div><small style="font-size:.6rem;word-break:break-all;display:block;margin-top:6px;font-weight:normal">${esc(url)}</small>`;
+    grid.appendChild(d);
+    new QRCode(d.querySelector(".q"), {text: url, width: 130, height: 130, colorDark: "#4A2E5B", colorLight: "#ffffff"});
+  }
+}
+function saveBase() {
+  const v = document.getElementById("base-in").value.trim().split("?")[0].split("#")[0];
+  if (!/^https?:\/\/\S+\.\S+/i.test(v)) { alert("الرابط لازم يبدأ بـ https:// ويكون رابط الموقع بعد الرفع"); return; }
+  try { localStorage.setItem("gz_base", v); } catch (e) {}
+  drawQR();
+}
+function openQR() {
+  showModal(`<div class="no-print">
+      <label style="font-size:.85rem">رابط الموقع بعد الرفع (مثال: https://my-cafe.netlify.app/):</label>
+      <input type="text" id="base-in" dir="ltr" placeholder="https://..." value="${esc(getBase())}">
+      <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+        <button class="btn btn-success" onclick="saveBase()">تحديث الـ QR</button>
+        <button class="btn btn-primary" onclick="window.print()">🖨️ طباعة</button>
+        <button class="btn btn-danger" onclick="closeModal()">إغلاق</button></div>
+      <div id="qr-warn" class="warn" style="margin-bottom:10px"></div></div>
+    <div id="qr-print"><div class="qr-grid" id="qr-grid"></div></div>`);
+  document.querySelector(".modal-card").style.maxWidth = "800px";
+  drawQR();
+}
+
+/* ================= تشغيل ================= */
+renderMenu();
+initStore(render);
+
+/* ================= إشعارات Push (حتى والموبايل مقفول) ================= */
+let myToken = null;
+async function pushToken() {
+  try {
+    if (!firebaseOn || !CONFIG.VAPID_KEY || !("Notification" in window) || !("serviceWorker" in navigator)) return null;
+    if ((await Notification.requestPermission()) !== "granted") return null;
+    const reg = await navigator.serviceWorker.ready;
+    myToken = myToken || await firebase.messaging().getToken({vapidKey: CONFIG.VAPID_KEY, serviceWorkerRegistration: reg});
+    return myToken;
+  } catch (e) { return null; }
+}
+const pushOn = () => { try { return localStorage.getItem("gz_push") === "1"; } catch (e) { return false; } };
+function refreshPushBtn() {
+  const b = $("push-btn");
+  b.classList.toggle("hidden", !(firebaseOn && CONFIG.VAPID_KEY));
+  b.textContent = pushOn() ? "🔕 إيقاف إشعارات الطلبات" : "🔔 تفعيل إشعارات الطلبات";
+}
+async function toggleStaffPush() {
+  unlockAudio();
+  if (pushOn()) {
+    const t = myToken || await pushToken();
+    if (t) dbRef.child("staffTokens/" + t).remove();
+    try { localStorage.removeItem("gz_push"); } catch (e) {}
+  } else {
+    const t = await pushToken();
+    if (!t) { showModal(`<h3>مقدرتش أفعّل الإشعارات</h3><p style="line-height:1.9;margin:10px 0">اتأكد إنك سمحت بالإشعارات للموقع، وإن الموقع بيفتح https، ومن الإعدادات الصح لـ Firebase (VAPID_KEY). على الآيفون لازم تثبّت الموقع كأيقونة الأول.</p><button class="btn btn-primary" style="width:100%" onclick="closeModal()">تمام</button>`); return; }
+    dbRef.child("staffTokens/" + t).set({user: currentUser.id, ts: Date.now()});
+    try { localStorage.setItem("gz_push", "1"); } catch (e) {}
+    showToast("تم تفعيل إشعارات الطلبات على الجهاز ده ✅");
+  }
+  refreshPushBtn();
+}
+
+/* ================= تثبيت كأيقونة (PWA) ================= */
+let installEv = null;
+window.addEventListener("beforeinstallprompt", e => { e.preventDefault(); installEv = e; });
+if (matchMedia("(display-mode: standalone)").matches || navigator.standalone) $("install-btn").classList.add("hidden");
+function installApp() {
+  if (installEv) { installEv.prompt(); installEv = null; return; }
+  showModal(`<h3>📲 تثبيت Ghazal Space</h3>
+    <p style="line-height:2;margin:10px 0"><b>أندرويد (كروم):</b> دوس على ⋮ ثم "تثبيت التطبيق" أو "إضافة إلى الشاشة الرئيسية".<br>
+    <b>آيفون (سفاري):</b> دوس على زرار المشاركة ⬆️ ثم "إضافة إلى الشاشة الرئيسية".<br>
+    <b>كمبيوتر (كروم/إيدج):</b> أيقونة التثبيت في شريط العنوان.</p>
+    <button class="btn btn-primary" style="width:100%" onclick="closeModal()">تمام</button>`);
+}
+if ("serviceWorker" in navigator && /^https?:$/.test(location.protocol)) navigator.serviceWorker.register("sw.js" + (CONFIG.FIREBASE && CONFIG.VAPID_KEY ? "?c=" + encodeURIComponent(JSON.stringify(CONFIG.FIREBASE)) : "")).catch(() => {});
+try { if (firebaseOn && CONFIG.VAPID_KEY && firebase.messaging.isSupported()) firebase.messaging().onMessage(p => { if (p.data && p.data.role === "staff") { playSound(); showToast((p.notification && p.notification.title) || "طلب جديد"); } }); } catch (e) {}
+if (params.get("admin") === "1") openCashier();
+</script>
+</body>
+</html>
