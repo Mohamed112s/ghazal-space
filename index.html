@@ -93,6 +93,7 @@ body.cashier .logo-box{background:#f4efed;color:#4A2E5B}
 .brush-title{display:inline-block;background:var(--b3);color:#fff;padding:12px 46px;font-size:1.7rem;clip-path:var(--brush);font-family:'Aref Ruqaa','Cairo',serif}
 .cat-brush{display:inline-block;background:var(--b2);color:var(--b3);padding:6px 32px;margin:20px 0 6px;font-size:1.15rem;clip-path:var(--brush);font-family:'Aref Ruqaa','Cairo',serif}
 body.cashier #lock{display:none!important}
+.vc-num{background:#1a1a1a;border:2px dashed #f1c40f;padding:12px;border-radius:10px;text-align:center;font-size:1.5rem;letter-spacing:2px;direction:ltr}
 @media print{
  body *{visibility:hidden}
  #qr-print,#qr-print *{visibility:visible}
@@ -182,6 +183,12 @@ body.cashier #lock{display:none!important}
   </div>
 
   <div class="admin-section">
+    <h3>⚙️ الإعدادات</h3>
+    <p style="font-size:.85rem;color:#ccc;margin:8px 0">عدد الطاولات، رقم فودافون كاش، طرق الدفع، الخلفية، والكود الرئيسي. محتاجة الكود الرئيسي.</p>
+    <button class="btn btn-warning" onclick="askMaster('settings')">فتح الإعدادات</button>
+  </div>
+
+  <div class="admin-section">
     <h3>👥 مسئولو الشيفت</h3>
     <div id="users-list" style="margin:10px 0"></div>
     <button class="btn btn-success" onclick="askMaster('add')">➕ إضافة حساب</button>
@@ -222,8 +229,10 @@ const CONFIG = {
   // لو سبته null يشتغل تجريبي على جهاز واحد. للتشغيل الحقيقي املاه من Firebase:
   FIREBASE: (window.GZ_CONFIG && GZ_CONFIG.FIREBASE && GZ_CONFIG.FIREBASE.databaseURL) ? GZ_CONFIG.FIREBASE : null,
   BG: "cream",     // خلفية المنيو: "cream" أو "lavender"
+  ALLOW_CASH: false,   // السماح بالكاش للكاشير (بيتغير من الإعدادات)
+  ALLOW_VCASH: true,   // السماح بفودافون كاش
   REQUIRE_CODE: true,  // الزبون لازم يدخل كود الطاولة (من الكاشير) قبل ما يطلب
-  VCASH_NUMBER: (window.GZ_CONFIG && GZ_CONFIG.VCASH_NUMBER) || "",  // رقم فودافون كاش للكافيه (فاضي = الخيار مخفي)
+  VCASH_NUMBER: (window.GZ_CONFIG && GZ_CONFIG.VCASH_NUMBER) || "01068862018",  // رقم فودافون كاش للكافيه (فاضي = الخيار مخفي)
   VAPID_KEY: (window.GZ_CONFIG && GZ_CONFIG.VAPID_KEY) || "",   // مفتاح Web Push من Firebase (لإشعارات والموبايل مقفول)
   /* مثال:
   FIREBASE: { apiKey:"...", authDomain:"...", databaseURL:"https://xxxx-default-rtdb.firebaseio.com", projectId:"...", appId:"..." }
@@ -252,7 +261,7 @@ const STATUS = {
 
 /* ================= طبقة البيانات ================= */
 const esc = s => String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-let orders = {}, users = {}, sessions = {}, sessLoaded = false, currentUser = null, dayStart = 0, firebaseOn = false, dbRef = null;
+let orders = {}, users = {}, settings = {}, sessions = {}, sessLoaded = false, currentUser = null, dayStart = 0, firebaseOn = false, dbRef = null;
 
 function initStore(cb) {
   if (CONFIG.FIREBASE && window.firebase) {
@@ -264,13 +273,15 @@ function initStore(cb) {
     dbRef.child("dayStart").on("value", s => { dayStart = s.val() || 0; cb(); });
     dbRef.child("users").on("value", s => { users = s.val() || {}; cb(); });
     dbRef.child("sessions").on("value", s => { sessions = s.val() || {}; sessLoaded = true; cb(); });
+    dbRef.child("settings").on("value", s => { settings = s.val() || {}; applySettings(); cb(); });
     dbRef.child("menu").on("value", s => { const v = s.val(); if (v) setMenu(v.items || []); cb(); });
   } else {
-    netWarn("⚠️ النظام مش مربوط بقاعدة البيانات — الطلبات مش هتوصل للكاشير");
+    netWarn("⚠️ النظام مش مربوط بقاعدة البيانات (" + (!window.GZ_CONFIG ? "ملف firebase-config.js مش محمّل" : !CONFIG.FIREBASE ? "إعدادات Firebase ناقصة: databaseURL" : !window.firebase ? "مكتبة Firebase مش بتتحمل" : "سبب غير معروف") + ") — الطلبات مش هتوصل للكاشير");
     const load = () => {
       try { orders = JSON.parse(localStorage.getItem("gz_orders")) || {}; dayStart = +localStorage.getItem("gz_day") || 0;
         const m = localStorage.getItem("gz_menu"); if (m) setMenu(JSON.parse(m));
-        users = JSON.parse(localStorage.getItem("gz_users")) || {}; }
+        users = JSON.parse(localStorage.getItem("gz_users")) || {};
+        settings = JSON.parse(localStorage.getItem("gz_settings")) || {}; applySettings(); }
       catch (e) { orders = {}; }
       cb();
     };
@@ -278,9 +289,14 @@ function initStore(cb) {
   }
 }
 function saveLocal() { try { localStorage.setItem("gz_orders", JSON.stringify(orders)); localStorage.setItem("gz_day", dayStart); } catch (e) {} }
-function addOrder(o) {
-  if (firebaseOn) return dbRef.child("orders").push(o).key;
-  const id = "o" + Date.now(); orders[id] = o; saveLocal(); render(); return id;
+function addOrder(o, receipt) {
+  if (firebaseOn) {
+    const key = dbRef.child("orders").push().key, u = {};
+    u["orders/" + key] = o;
+    if (receipt) u["receipts/" + key] = {img: receipt, ts: Date.now()};
+    dbRef.update(u); return key;
+  }
+  const id = "o" + Date.now(); if (receipt) o.rcpt = receipt; orders[id] = o; saveLocal(); render(); return id;
 }
 function patchOrder(id, p) {
   if (firebaseOn) dbRef.child("orders/" + id).update(p);
@@ -304,6 +320,21 @@ function setDayStart(t) {
 }
 
 function netWarn(m) { const b = document.getElementById("net-warn"); b.textContent = m || ""; b.classList.toggle("hidden", !m); }
+const BASE = {tables: CONFIG.TABLES, vc: CONFIG.VCASH_NUMBER, cash: CONFIG.ALLOW_CASH, vcash: CONFIG.ALLOW_VCASH, req: CONFIG.REQUIRE_CODE, bg: CONFIG.BG};
+function applySettings() {
+  const t = settings || {};
+  CONFIG.TABLES = Math.max(1, Math.min(200, parseInt(t.tables, 10) || BASE.tables));
+  CONFIG.VCASH_NUMBER = typeof t.vcashNumber === "string" ? t.vcashNumber : BASE.vc;
+  CONFIG.ALLOW_CASH = "allowCash" in t ? !!t.allowCash : BASE.cash;
+  CONFIG.ALLOW_VCASH = "allowVcash" in t ? !!t.allowVcash : BASE.vcash;
+  CONFIG.REQUIRE_CODE = "requireCode" in t ? !!t.requireCode : BASE.req;
+  CONFIG.BG = t.bg || BASE.bg;
+  document.body.dataset.bg = CONFIG.BG || "cream";
+}
+function writeSettings(n) {
+  if (firebaseOn) dbRef.child("settings").set(n);
+  else { settings = n; try { localStorage.setItem("gz_settings", JSON.stringify(n)); } catch (e) {} applySettings(); render(); }
+}
 function setMenu(arr) {
   ALL = (Array.isArray(arr) ? arr : Object.values(arr || {})).filter(i => i && /^[\w-]+$/.test(i.id) && i.name && +i.price >= 0);
   Object.keys(cart).forEach(id => { if (!ALL.find(i => i.id === id)) delete cart[id]; });
@@ -321,7 +352,7 @@ function saveMenu(arr) {
 /* ================= رقم الطاولة من الرابط ================= */
 const params = new URLSearchParams(location.search);
 let tableNum = parseInt(params.get("table"), 10);
-if (!(tableNum >= 1 && tableNum <= CONFIG.TABLES)) tableNum = 1;
+if (!(tableNum >= 1 && tableNum <= 500)) tableNum = 1;
 document.getElementById("table-num").textContent = tableNum;
 document.body.dataset.bg = CONFIG.BG || "cream";
 document.getElementById("lock-table").textContent = tableNum;
@@ -360,28 +391,45 @@ function openCartModal() {
       <button class="qty-btn" onclick="changeQty('${id}',1)">+</button></span>
       <span>${i.price * cart[id]}</span></div>`; }).join("")
     + `<h3 style="margin:12px 0">الإجمالي: ${cartTotal()} ${CONFIG.CURRENCY}</h3>
-       <div style="margin-bottom:12px"><b>طريقة الدفع:</b><div style="display:flex;gap:8px;margin-top:6px">
-         <button class="btn ${payMethod === "cash" ? "btn-success" : "btn-primary"}" style="flex:1" onclick="payMethod='cash';openCartModal()">💵 كاش للكاشير</button>
-         ${CONFIG.VCASH_NUMBER ? `<button class="btn ${payMethod === "vcash" ? "btn-success" : "btn-primary"}" style="flex:1" onclick="payMethod='vcash';openCartModal()">📱 فودافون كاش</button>` : ""}</div></div>
+       ${payUI()}
        <button class="btn btn-success" style="width:100%" onclick="submitOrder()">إرسال الطلب ✅</button>`
     : `<p style="text-align:center;color:#ccc;padding:20px">السلة فاضية، اختار من المنيو ☕</p>`;
   showModal(`<h3>🛒 سلتك - طاولة ${tableNum}</h3><div style="margin-top:12px">${body}</div>
     <button class="btn btn-danger" style="width:100%;margin-top:10px" onclick="closeModal()">إغلاق</button>`);
 }
+function payOpts() {
+  const o = []; if (CONFIG.ALLOW_CASH) o.push("cash"); if (CONFIG.ALLOW_VCASH && CONFIG.VCASH_NUMBER) o.push("vcash");
+  return o.length ? o : ["cash"];
+}
+function payUI() {
+  const o = payOpts(); if (!o.includes(payMethod)) payMethod = o[0];
+  const L = {cash: "💵 كاش للكاشير", vcash: "📱 فودافون كاش"};
+  const btns = o.length > 1 ? o.map(m => `<button class="btn ${payMethod === m ? "btn-success" : "btn-primary"}" style="flex:1" onclick="payMethod='${m}';openCartModal()">${L[m]}</button>`).join("") : `<div style="flex:1;font-weight:bold">${L[o[0]]}</div>`;
+  return `<div style="margin-bottom:12px"><b>طريقة الدفع:</b><div style="display:flex;gap:8px;margin-top:6px">${btns}</div>${payMethod === "vcash" ? `<p style="font-size:.8rem;color:#f1c40f;margin-top:6px">هتحوّل المبلغ وترفع صورة التحويل قبل إرسال الطلب.</p>` : ""}</div>`;
+}
+let pendingTokenP = null, vcShot = "";
+function currentOrder(method, extra) {
+  return Object.assign({
+    table: tableNum, status: "new", ts: Date.now(), total: cartTotal(), pay: method,
+    items: Object.entries(cart).map(([id, q]) => { const i = ALL.find(x => x.id === id); return {name: i.name, price: i.price, qty: q}; })
+  }, extra || {});
+}
+function finishOrder(newId) {
+  if (pendingTokenP) pendingTokenP.then(t => { if (t && newId) patchOrder(newId, {fcm: t}); });
+  cart = {}; updateBadge();
+}
+function doneModal(extra) {
+  showModal(`<h3 style="text-align:center">✅ تم إرسال طلبك!</h3><p style="text-align:center;margin:12px 0">${extra || "هتلاقي حالة الطلب أعلى الصفحة."}</p>
+    <button class="btn btn-primary" style="width:100%" onclick="closeModal()">تمام</button>`);
+}
 function submitOrder() {
   if (!Object.keys(cart).length) return;
   if (firebaseOn && CONFIG.REQUIRE_CODE && !sessOK) { closeModal(); checkLock(); return; }
-  unlockAudio(); const tokenP = pushToken(); if (!firebaseOn) askNotify();
-  const tot = cartTotal(), method = CONFIG.VCASH_NUMBER ? payMethod : "cash";
-  const newId = addOrder({
-    table: tableNum, status: "new", ts: Date.now(), total: cartTotal(), pay: method,
-    items: Object.entries(cart).map(([id, q]) => { const i = ALL.find(x => x.id === id); return {name: i.name, price: i.price, qty: q}; })
-  });
-  tokenP.then(t => { if (t && newId) patchOrder(newId, {fcm: t}); });
-  cart = {}; updateBadge();
-  if (method === "vcash") { showVcash(newId, tot); return; }
-  showModal(`<h3 style="text-align:center">✅ تم إرسال طلبك!</h3><p style="text-align:center;margin:12px 0">هتلاقي حالة الطلب أعلى الصفحة.</p>
-    <button class="btn btn-primary" style="width:100%" onclick="closeModal()">تمام</button>`);
+  unlockAudio(); pendingTokenP = pushToken(); if (!firebaseOn) askNotify();
+  const o = payOpts(), method = o.includes(payMethod) ? payMethod : o[0];
+  if (method === "vcash") { vcShot = ""; showVcash(cartTotal()); return; }
+  finishOrder(addOrder(currentOrder("cash")));
+  doneModal();
 }
 
 /* ================= الكاشير ================= */
@@ -424,11 +472,13 @@ function askMaster(act, id) {
     <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="backModal()">رجوع</button>`);
   setTimeout(() => $("mp-in") && $("mp-in").focus(), 50);
 }
-function masterOk(act, id) {
+async function masterOk(act, id) {
   if (!guard("mp-err")) return;
-  if (fv("mp-in") !== CONFIG.MASTER_PIN) { fail("mp-err", "الكود الرئيسي غلط"); return; }
+  const m = settings && settings.master;
+  const ok = m ? (await hashPw(fv("mp-in"), m.salt)) === m.hash : fv("mp-in") === CONFIG.MASTER_PIN;
+  if (!ok) { fail("mp-err", "الكود الرئيسي غلط"); return; }
   tries = 0;
-  if (act === "del") { removeUser(id); backModal(); } else newUserForm();
+  if (act === "del") { removeUser(id); backModal(); } else if (act === "settings") showSettings(); else newUserForm();
 }
 function newUserForm() {
   showModal(`<h3>➕ حساب مسئول شيفت جديد</h3>
@@ -451,6 +501,37 @@ async function saveNewUser() {
   writeUser(u, {name, salt, hash: await hashPw(p, salt), createdAt: Date.now()});
   closeModal();
   if (!currentUser) { currentUser = {id: u, name}; showCashier(); }
+}
+function showSettings() {
+  const row = "display:block;margin:10px 0", sel = "width:100%;padding:10px;border-radius:6px;background:#1a1a1a;color:#fff;border:1px solid #888;margin:10px 0";
+  showModal(`<h3>⚙️ الإعدادات</h3>
+    <label>عدد الطاولات (1 - 200)</label><input type="text" id="st-tables" inputmode="numeric" value="${CONFIG.TABLES}">
+    <label>رقم فودافون كاش</label><input type="text" id="st-vc" inputmode="numeric" dir="ltr" value="${esc(CONFIG.VCASH_NUMBER)}">
+    <label style="${row}"><input type="checkbox" id="st-allowvc" ${CONFIG.ALLOW_VCASH ? "checked" : ""}> السماح بالدفع بفودافون كاش (مع صورة التحويل)</label>
+    <label style="${row}"><input type="checkbox" id="st-allowcash" ${CONFIG.ALLOW_CASH ? "checked" : ""}> السماح بالدفع كاش للكاشير</label>
+    <label style="${row}"><input type="checkbox" id="st-req" ${CONFIG.REQUIRE_CODE ? "checked" : ""}> إلزام الزبون بكود الطاولة</label>
+    <label>خلفية المنيو</label>
+    <select id="st-bg" style="${sel}"><option value="cream" ${CONFIG.BG !== "lavender" ? "selected" : ""}>كريمي</option><option value="lavender" ${CONFIG.BG === "lavender" ? "selected" : ""}>لافندر</option></select>
+    <label>كود رئيسي جديد (سيبه فاضي لو مش عايز تغيره)</label><input type="password" id="st-newpin" inputmode="numeric" autocomplete="new-password">
+    <div id="st-err" style="color:#e74c3c;min-height:22px"></div>
+    <button class="btn btn-success" style="width:100%" onclick="saveSettings()">حفظ</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">إلغاء</button>`);
+}
+async function saveSettings() {
+  const err = m => { $("st-err").textContent = m; };
+  const t = parseInt(fv("st-tables"), 10), num = fv("st-vc").replace(/\s/g, "");
+  if (!(t >= 1 && t <= 200)) return err("عدد الطاولات من 1 لـ 200");
+  if (num && !/^01[0-9]{9}$/.test(num)) return err("رقم فودافون كاش لازم يبقى 11 رقم يبدأ بـ 01");
+  const n = {tables: t, vcashNumber: num, allowVcash: $("st-allowvc").checked, allowCash: $("st-allowcash").checked, requireCode: $("st-req").checked, bg: fv("st-bg")};
+  if (!n.allowVcash && !n.allowCash) return err("لازم تسمح بطريقة دفع واحدة على الأقل");
+  if (n.allowVcash && !num) return err("اكتب رقم فودافون كاش");
+  const np = fv("st-newpin").trim();
+  if (np) {
+    if (np.length < 4) return err("الكود الرئيسي الجديد 4 أرقام على الأقل");
+    const salt = Array.from(crypto.getRandomValues(new Uint8Array(8)), b => b.toString(16)).join("");
+    n.master = {salt, hash: await hashPw(np, salt)};
+  } else if (settings && settings.master) n.master = settings.master;
+  writeSettings(n); closeModal();
 }
 function renderUsers() {
   const ks = Object.keys(users).filter(k => NAME_RE.test(k));
@@ -524,7 +605,7 @@ function renderCashier() {
   box.innerHTML = codeBox(selTable) + `<h4>طلبات طاولة ${selTable}</h4>` + (act.length ? act.map(o => `
     <div class="order-card"><div>${itemsText(o)}</div>
       <div style="margin:6px 0;color:#f1c40f">${o.total} ${CONFIG.CURRENCY} — ${statusText(o)}</div>
-      ${o.pay === "vcash" ? `<div style="margin:4px 0">📱 فودافون كاش: ${o.vcOk ? "✅ تم التأكيد" : (o.vcSent ? "العميل بيقول حوّل (آخر 4: " + esc(o.payRef || "—") + ")" : "لسه مش محوّل")} ${o.vcOk ? "" : `<button class="btn btn-success" onclick="patchOrder('${o.id}',{vcOk:true})">✅ تم استلام التحويل</button>`}</div>` : ""}
+      ${o.pay === "vcash" ? vcCard(o) : ""}
       <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
         <label>الوقت (دقيقة):</label>
         <input type="number" id="eta-${o.id}" min="1" max="180" value="${o.etaMin || 10}" style="width:80px;padding:6px;border-radius:5px;border:1px solid #888;background:#1a1a1a;color:#fff">
@@ -713,30 +794,67 @@ function vcLine(act) {
   const tot = v.reduce((x, o) => x + o.total, 0), pend = v.filter(o => !o.vcOk).length;
   return `<p style="color:#f1c40f">📱 فودافون كاش: ${tot} ${CONFIG.CURRENCY}${pend ? ` — ⚠️ ${pend} تحويل لسه مش مؤكد` : " — ✅ مؤكد"}</p>`;
 }
-function showVcash(id, tot) {
+function showVcash(tot) {
   showModal(`<h3 style="text-align:center">📱 الدفع بفودافون كاش</h3>
     <p style="text-align:center;margin:10px 0">حوّل <b>${tot} ${CONFIG.CURRENCY}</b> على الرقم:</p>
-    <div style="background:#1a1a1a;border:2px dashed #f1c40f;padding:12px;border-radius:10px;text-align:center;font-size:1.5rem;letter-spacing:2px;direction:ltr">${esc(CONFIG.VCASH_NUMBER)}</div>
+    <div class="vc-num">${esc(CONFIG.VCASH_NUMBER)}</div>
     <button class="btn btn-warning" style="width:100%;margin:10px 0" onclick="copyVcash(this)">نسخ الرقم 📋</button>
-    <p style="font-size:.85rem;color:#ccc;margin-bottom:6px">بعد التحويل اكتب آخر 4 أرقام من المحفظة اللي حولت منها عشان الكاشير يتأكد:</p>
-    <input type="text" id="vc-ref" inputmode="numeric" maxlength="4" placeholder="آخر 4 أرقام" dir="ltr">
-    <button class="btn btn-success" style="width:100%" onclick="saveVcRef('${id}')">تم التحويل ✅</button>
-    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">هحوّل بعدين</button>`);
+    <p style="font-size:.85rem;color:#f1c40f;margin-bottom:6px">⚠️ لازم ترفع صورة (سكرين شوت) التحويل عشان الطلب يتبعت:</p>
+    <input type="file" id="vc-file" accept="image/*" onchange="pickShot(this)" style="width:100%;margin-bottom:8px">
+    <div id="vc-prev" class="img-prev"></div>
+    <div id="vc-err" style="color:#e74c3c;min-height:22px"></div>
+    <button class="btn btn-success" style="width:100%" onclick="confirmVcash()">إرسال الطلب ✅</button>
+    <button class="btn btn-danger" style="width:100%;margin-top:8px" onclick="closeModal()">رجوع</button>`);
 }
 function copyVcash(b) { try { navigator.clipboard.writeText(CONFIG.VCASH_NUMBER); b.textContent = "تم النسخ ✅"; } catch (e) {} }
-function saveVcRef(id) { patchOrder(id, {payRef: fv("vc-ref").replace(/\D/g, "").slice(0, 4), vcSent: true}); closeModal(); }
+function shrink(file, max, q, cb) {
+  const r = new FileReader();
+  r.onload = () => {
+    const im = new Image();
+    im.onload = () => {
+      const k = Math.min(1, max / Math.max(im.width, im.height)), c = document.createElement("canvas");
+      c.width = Math.round(im.width * k); c.height = Math.round(im.height * k);
+      const x = c.getContext("2d"); x.fillStyle = "#fff"; x.fillRect(0, 0, c.width, c.height); x.drawImage(im, 0, 0, c.width, c.height);
+      cb(c.toDataURL("image/jpeg", q));
+    };
+    im.onerror = () => cb(""); im.src = r.result;
+  };
+  r.readAsDataURL(file);
+}
+function pickShot(inp) {
+  const f = inp.files[0]; if (!f) return;
+  shrink(f, 1000, 0.6, d => { vcShot = d; $("vc-prev").innerHTML = d ? `<img src="${esc(d)}" alt="">` : ""; $("vc-err").textContent = d ? "" : "الصورة دي مش مدعومة، جرب صورة تانية"; });
+}
+function confirmVcash() {
+  if (!vcShot) { $("vc-err").textContent = "لازم ترفع صورة التحويل الأول"; return; }
+  if (firebaseOn && CONFIG.REQUIRE_CODE && !sessOK) { closeModal(); checkLock(); return; }
+  const id = addOrder(currentOrder("vcash", {vcSent: true, hasReceipt: true}), vcShot);
+  finishOrder(id); vcShot = ""; doneModal("بعد ما الكاشير يتأكد من التحويل هيبدأ تحضير طلبك.");
+}
+async function showReceipt(id) {
+  showModal(`<h3>🧾 صورة التحويل</h3><div id="rc-box" style="text-align:center;margin:10px 0">جاري التحميل...</div>
+    <button class="btn btn-danger" style="width:100%" onclick="closeModal()">إغلاق</button>`);
+  let img = "";
+  try { if (firebaseOn) { const sn = await dbRef.child("receipts/" + id).get(); img = (sn.val() || {}).img || ""; } else img = (orders[id] || {}).rcpt || ""; } catch (e) {}
+  $("rc-box").innerHTML = String(img).startsWith("data:image/") ? `<img src="${esc(img)}" style="max-width:100%;border-radius:8px" alt="">` : "مفيش صورة محفوظة للطلب ده.";
+}
+function vcCard(o) {
+  return `<div style="margin:4px 0">📱 فودافون كاش: ${o.vcOk ? "✅ تم التأكيد" : "⏳ بانتظار التأكيد"}
+    ${o.hasReceipt ? `<button class="btn btn-primary" onclick="showReceipt('${o.id}')">🧾 عرض صورة التحويل</button>` : `<span style="color:#e74c3c">بدون صورة</span>`}
+    ${o.vcOk ? "" : `<button class="btn btn-success" onclick="patchOrder('${o.id}',{vcOk:true})">✅ تم التأكيد</button>`}</div>`;
+}
 function render() { checkLock(); checkNotify(); renderCustomer(); if (cashierOpen) renderCashier(); }
 setInterval(() => { if (!cashierOpen) renderCustomer(); }, 15000);
 
 /* ================= QR لكل طاولة ================= */
 function getBase() {
   let b = CONFIG.BASE_URL || "";
-  try { b = b || localStorage.getItem("gz_base") || ""; } catch (e) {}
   if (!b && /^https?:$/.test(location.protocol)) b = location.origin + location.pathname;
+  try { b = b || localStorage.getItem("gz_base") || ""; } catch (e) {}
   return b;
 }
 function drawQR() {
-  const base = getBase(), grid = document.getElementById("qr-grid"), warn = document.getElementById("qr-warn");
+  const inp = document.getElementById("base-in"), base = ((inp && inp.value) || getBase()).trim(), grid = document.getElementById("qr-grid"), warn = document.getElementById("qr-warn");
   grid.innerHTML = "";
   if (!/^https?:\/\//i.test(base)) { warn.textContent = "اكتب رابط الموقع الحقيقي (يبدأ بـ https://) الأول، عشان الـ QR يفتح التطبيق مش يطلع نص."; return; }
   warn.textContent = "";
